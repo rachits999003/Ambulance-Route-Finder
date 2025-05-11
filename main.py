@@ -16,7 +16,7 @@ def get_shegown_map():
 
 # ----------- Create the graph ----------- #
 G = get_shegown_map()
-print(nx.info(G))
+print(G)
 
 # ----------- Thread for Simulating Movement ----------- #
 def simulate_ambulance_movement(path):
@@ -29,18 +29,23 @@ def simulate_ambulance_movement(path):
 
 # ----------- Dijkstra Function ----------- #
 def find_best_route():
-    start = start_var.get()
-    dest = dest_var.get()
+    start_name = start_var.get()
+    dest_name = dest_var.get()
 
-    # Convert location names to nearest nodes in the graph
-    start_node = ox.distance.nearest_nodes(G, X=start[1], Y=start[0])
-    dest_node = ox.distance.nearest_nodes(G, X=dest[1], Y=dest[0])
+    # Retrieve coordinates from nodes based on the selected name
+    start_coords = next(node[1] for node in nodes if node[0] == start_name)
+    dest_coords = next(node[1] for node in nodes if node[0] == dest_name)
+
+    # Convert location names to nearest nodes in the graph using coordinates
+    start_node = ox.distance.nearest_nodes(G, X=start_coords[1], Y=start_coords[0])
+    dest_node = ox.distance.nearest_nodes(G, X=dest_coords[1], Y=dest_coords[0])
 
     if start_node not in G.nodes or dest_node not in G.nodes:
         messagebox.showerror("Invalid Input", "Start or destination not found in the map.")
         return
 
     try:
+        # Find the shortest path using Dijkstra
         path = nx.dijkstra_path(G, start_node, dest_node)
         distance = nx.dijkstra_path_length(G, start_node, dest_node)
         result = f"Best Route: {' → '.join(map(str, path))}\nTotal Distance: {distance}"
@@ -51,6 +56,7 @@ def find_best_route():
 
     except nx.NetworkXNoPath:
         result_label.config(text="No path found between the selected locations.")
+
 
 # ----------- Optional Graph Visualization ----------- #
 def show_map():
