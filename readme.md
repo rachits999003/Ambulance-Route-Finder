@@ -20,6 +20,7 @@ Make sure Python 3.7+ is installed. Then install the required libraries:
 
 ```bash
 pip install networkx matplotlib
+```
 
 🖥️ Usage
 Enter the start location (e.g., A).
@@ -33,12 +34,12 @@ The optimal path and total distance will be displayed.
 Optionally, view a visualized graph of the path.
 
 🗺️ Sample Road Graph
-
+```
 A --4--> B --2--> C
  \        |
   \       v
    >--5--> C
-   
+```
 🛠️ Future Improvements
 Real-time GPS integration
 
