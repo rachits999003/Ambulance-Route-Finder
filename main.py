@@ -3,14 +3,10 @@ from tkinter import ttk, messagebox
 import threading
 import time
 import os
-import numpy as np
-import folium
-from folium import plugins
-import osmnx as ox
-import networkx as nx
 import webbrowser
-from shapely.geometry import Point
-import geopandas as gpd
+import folium
+import random
+import math
 from functools import partial
 
 class AmbulanceRouteFinder:
@@ -21,10 +17,26 @@ class AmbulanceRouteFinder:
         self.root.configure(bg="#f0f0f0")
         
         # Center coordinates for Shegaon
-        self.shegaon_coords = (20.7937, 76.6994)  # More accurate coordinates
-        self.graph = None
+        self.shegaon_coords = (20.7937, 76.6994)
         self.current_route = None
         self.map_file = "shegaon_map.html"
+        
+        # Define important locations in Shegaon
+        self.locations = [
+            ("Dr. Hedgewar Hospital", (20.7930, 76.6985)),
+            ("Shree Gajanan Maharaj Mandir", (20.7937, 76.6994)),
+            ("Bus Stand", (20.7940, 76.7010)),
+            ("Shegaon Railway Station", (20.7970, 76.7000)),
+            ("Main Bazaar", (20.7935, 76.7002)),
+            ("Subhash Nagar", (20.7915, 76.6980)),
+            ("Civil Hospital", (20.7945, 76.6970)),
+            ("Shivaji Nagar", (20.7925, 76.7015)),
+            ("Akot Road", (20.7960, 76.7020)),
+            ("Gandhi Chowk", (20.7933, 76.6990))
+        ]
+        
+        # Virtual road network (simplified)
+        self.road_network = self._create_dummy_road_network()
         
         # Create a style
         style = ttk.Style()
@@ -34,7 +46,9 @@ class AmbulanceRouteFinder:
         style.configure('TButton', font=('Arial', 11, 'bold'))
         
         self.create_widgets()
-        self.load_map_data()
+        
+        # Load dummy map data (much faster)
+        self.load_dummy_map_data()
     
     def create_widgets(self):
         # Main frame
@@ -63,20 +77,6 @@ class AmbulanceRouteFinder:
         # Location selection frame
         select_frame = ttk.LabelFrame(main_frame, text="Select Locations", padding=10)
         select_frame.pack(fill=tk.X, pady=5)
-        
-        # Define important locations in Shegaon
-        self.locations = [
-            ("Dr. Hedgewar Hospital", (20.7930, 76.6985)),
-            ("Shree Gajanan Maharaj Mandir", (20.7937, 76.6994)),
-            ("Bus Stand", (20.7940, 76.7010)),
-            ("Shegaon Railway Station", (20.7970, 76.7000)),
-            ("Main Bazaar", (20.7935, 76.7002)),
-            ("Subhash Nagar", (20.7915, 76.6980)),
-            ("Civil Hospital", (20.7945, 76.6970)),
-            ("Shivaji Nagar", (20.7925, 76.7015)),
-            ("Akot Road", (20.7960, 76.7020)),
-            ("Gandhi Chowk", (20.7933, 76.6990))
-        ]
         
         # Start location
         ttk.Label(select_frame, text="Emergency Start Point:").grid(row=0, column=0, sticky=tk.W, pady=5)
@@ -130,29 +130,65 @@ class AmbulanceRouteFinder:
                               font=('Arial', 12, 'bold'), foreground="#4CAF50")
         status_label.pack()
     
-    def load_map_data(self):
-        """Load OSM data in a separate thread to avoid freezing the UI"""
-        self.loading_thread = threading.Thread(target=self._load_graph_data)
+    def _create_dummy_road_network(self):
+        """Create a simplified dummy road network based on known locations"""
+        road_network = {}
+        
+        # For each location, create connections to 3-5 nearest locations
+        for name1, coords1 in self.locations:
+            # Find distances to all other locations
+            distances = []
+            for name2, coords2 in self.locations:
+                if name1 != name2:
+                    # Calculate distance between locations
+                    dist = self._haversine_distance(coords1, coords2)
+                    distances.append((name2, dist))
+            
+            # Sort by distance
+            distances.sort(key=lambda x: x[1])
+            
+            # Connect to 3-5 nearest locations
+            num_connections = random.randint(3, min(5, len(distances)))
+            road_network[name1] = [(name2, dist) for name2, dist in distances[:num_connections]]
+            
+        return road_network
+    
+    def _haversine_distance(self, coord1, coord2):
+        """Calculate the distance between two coordinates in km"""
+        # Radius of the Earth in km
+        R = 6371.0
+        
+        # Convert coordinates to radians
+        lat1, lon1 = math.radians(coord1[0]), math.radians(coord1[1])
+        lat2, lon2 = math.radians(coord2[0]), math.radians(coord2[1])
+        
+        # Differences
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        # Haversine formula
+        a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        
+        # Distance in km
+        distance = R * c
+        
+        return distance
+    
+    def load_dummy_map_data(self):
+        """Simulate loading map data with a short delay"""
+        self.loading_thread = threading.Thread(target=self._simulate_loading)
         self.loading_thread.daemon = True
         self.loading_thread.start()
     
-    def _load_graph_data(self):
-        """Background task to load the graph data"""
+    def _simulate_loading(self):
+        """Simulate loading process with a short delay"""
         try:
-            # Define the bounding box for Shegaon with a larger area to ensure coverage
-            north, south, east, west = 20.8037, 20.7837, 76.7094, 76.6894
-            
-            # Get the driving network - FIX HERE: Use a dictionary for the bbox
-            # bbox = {'north': north, 'south': south, 'east': east, 'west': west}
-            bbox = [north, south, east, west]
-            self.graph = ox.graph_from_bbox(bbox, network_type='drive')
-
-
-            # Project the graph to UTM
-            self.graph_proj = ox.project_graph(self.graph)
-            
-            # Create the initial map and save it
+            # Create the road network (already done in init)
             self._create_base_map()
+            
+            # Artificial delay to simulate loading (much shorter)
+            time.sleep(1.0)
             
             # Update UI from the main thread
             self.root.after(0, self._map_loaded)
@@ -199,8 +235,90 @@ class AmbulanceRouteFinder:
                 icon=folium.Icon(icon="map-marker", prefix="fa", color="blue")
             ).add_to(m)
         
+        # Add roads (simplified)
+        added_roads = set()  # Keep track of roads we've already added
+        
+        for name1, connections in self.road_network.items():
+            coords1 = next((loc[1] for loc in self.locations if loc[0] == name1), None)
+            
+            for name2, _ in connections:
+                # Create a unique road identifier
+                road_id = tuple(sorted([name1, name2]))
+                
+                # Skip if we've already added this road
+                if road_id in added_roads:
+                    continue
+                    
+                coords2 = next((loc[1] for loc in self.locations if loc[0] == name2), None)
+                
+                # Add the road line
+                if coords1 and coords2:
+                    folium.PolyLine(
+                        [coords1, coords2],
+                        color="gray",
+                        weight=2,
+                        opacity=0.7
+                    ).add_to(m)
+                    
+                    # Mark as added
+                    added_roads.add(road_id)
+        
         # Save the map
         m.save(self.map_file)
+    
+    def _dijkstra(self, start, end):
+        """
+        Find shortest path using Dijkstra's algorithm.
+        This is a simplified version for our dummy network.
+        """
+        # Initialize distances with infinity for all nodes except start
+        distances = {loc[0]: float('infinity') for loc in self.locations}
+        distances[start] = 0
+        
+        # Track previous nodes for path reconstruction
+        previous = {loc[0]: None for loc in self.locations}
+        
+        # Unvisited nodes
+        unvisited = set(loc[0] for loc in self.locations)
+        
+        while unvisited:
+            # Find unvisited node with minimum distance
+            current = min(unvisited, key=lambda x: distances[x])
+            
+            # If we reached the end or no path exists
+            if current == end or distances[current] == float('infinity'):
+                break
+                
+            # Remove current from unvisited
+            unvisited.remove(current)
+            
+            # Check all neighbors of current
+            if current in self.road_network:
+                for neighbor, distance in self.road_network[current]:
+                    # Calculate potential new distance
+                    new_distance = distances[current] + distance
+                    
+                    # Update if shorter path found
+                    if new_distance < distances[neighbor]:
+                        distances[neighbor] = new_distance
+                        previous[neighbor] = current
+        
+        # Reconstruct path
+        path = []
+        current = end
+        
+        while current:
+            path.append(current)
+            current = previous[current]
+            
+        # Reverse to get path from start to end
+        path.reverse()
+        
+        # Check if path exists
+        if path[0] != start:
+            return None, float('infinity')
+            
+        return path, distances[end]
     
     def find_route(self):
         """Find the fastest route between selected points"""
@@ -210,43 +328,33 @@ class AmbulanceRouteFinder:
         if start_name == dest_name:
             messagebox.showwarning("Warning", "Start and destination cannot be the same.")
             return
-            
-        # Get coordinates for selected locations
-        start_coords = next((loc[1] for loc in self.locations if loc[0] == start_name), None)
-        dest_coords = next((loc[1] for loc in self.locations if loc[0] == dest_name), None)
         
-        if not start_coords or not dest_coords:
-            messagebox.showerror("Error", "Could not get coordinates for selected locations.")
-            return
-            
         try:
-            # Find nearest network nodes to our points
-            start_node = ox.distance.nearest_nodes(self.graph, X=start_coords[1], Y=start_coords[0])
-            end_node = ox.distance.nearest_nodes(self.graph, X=dest_coords[1], Y=dest_coords[0])
+            # Find route using our simplified Dijkstra
+            route, distance = self._dijkstra(start_name, dest_name)
             
-            # Calculate shortest path using Dijkstra's algorithm
-            route = nx.shortest_path(self.graph, start_node, end_node, weight='length')
+            if not route:
+                messagebox.showerror("Error", "No route found between these locations.")
+                return
+                
             self.current_route = route
             
-            # Get route length
-            length_m = sum(ox.utils_graph.get_route_edge_attributes(self.graph, route, 'length'))
-            length_km = length_m / 1000  # Convert to kilometers
-            
-            # Get route nodes coordinates
-            route_coords = [(self.graph.nodes[node]['y'], self.graph.nodes[node]['x']) for node in route]
+            # Get route coordinates
+            route_coords = [next((loc[1] for loc in self.locations if loc[0] == name), None) for name in route]
             
             # Calculate estimated travel time (assuming ambulance speed of 40 km/h average in town)
             ambulance_speed_kmh = 40
-            travel_time_hours = length_km / ambulance_speed_kmh
+            travel_time_hours = distance / ambulance_speed_kmh
             travel_time_mins = travel_time_hours * 60
             
             # Update info text
             self.info_text.config(state=tk.NORMAL)
             self.info_text.delete(1.0, tk.END)
             self.info_text.insert(tk.END, f"Route from {start_name} to {dest_name}:\n\n")
-            self.info_text.insert(tk.END, f"Distance: {length_km:.2f} km\n")
+            self.info_text.insert(tk.END, f"Path: {' → '.join(route)}\n\n")
+            self.info_text.insert(tk.END, f"Distance: {distance:.2f} km\n")
             self.info_text.insert(tk.END, f"Estimated travel time: {travel_time_mins:.1f} minutes\n")
-            self.info_text.insert(tk.END, f"Number of turns: {len(route) - 2}\n\n")
+            self.info_text.insert(tk.END, f"Number of stops: {len(route) - 2}\n\n")
             self.info_text.insert(tk.END, "Route created successfully. Click 'Simulate Ambulance' to visualize.")
             self.info_text.config(state=tk.DISABLED)
             
@@ -259,8 +367,6 @@ class AmbulanceRouteFinder:
             # Update ambulance status
             self.ambulance_status.set("Route calculated, ready for dispatch 🚑")
             
-        except nx.NetworkXNoPath:
-            messagebox.showerror("Error", "No route found between these locations.")
         except Exception as e:
             messagebox.showerror("Error", f"Error finding route: {str(e)}")
     
@@ -272,6 +378,7 @@ class AmbulanceRouteFinder:
         for name, coords in self.locations:
             is_start = name == start_name
             is_dest = name == dest_name
+            is_route = name in self.current_route and not (is_start or is_dest)
             
             if is_start:
                 icon_color = "green"
@@ -279,6 +386,9 @@ class AmbulanceRouteFinder:
             elif is_dest:
                 icon_color = "red"
                 icon_type = "plus"
+            elif is_route:
+                icon_color = "orange"
+                icon_type = "map-pin"
             else:
                 icon_color = "blue"
                 icon_type = "map-marker"
@@ -333,10 +443,20 @@ class AmbulanceRouteFinder:
         """Run the ambulance movement simulation"""
         try:
             # Get route coordinates
-            route_coords = [(self.graph.nodes[node]['y'], self.graph.nodes[node]['x']) for node in self.current_route]
+            route_coords = [next((loc[1] for loc in self.locations if loc[0] == name), None) for name in self.current_route]
             
             # Create a map for the simulation
             m = folium.Map(location=self.shegaon_coords, zoom_start=15, tiles="cartodbpositron")
+            
+            # Add route points
+            for name in self.current_route[1:-1]:  # Skip start and end
+                coords = next((loc[1] for loc in self.locations if loc[0] == name), None)
+                folium.Marker(
+                    location=coords,
+                    popup=f"<b>{name}</b>",
+                    tooltip=name,
+                    icon=folium.Icon(icon="map-pin", prefix="fa", color="orange")
+                ).add_to(m)
             
             # Add the route line
             folium.PolyLine(
@@ -361,20 +481,14 @@ class AmbulanceRouteFinder:
             ambulance_group = folium.FeatureGroup(name="Ambulance")
             m.add_child(ambulance_group)
             
-            # Create an icon for the ambulance
-            ambulance_icon = folium.features.CustomIcon(
-                "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-                icon_size=(25, 41)
-            )
-            
             # Simulate movement
-            steps = min(10, len(route_coords))  # Use at most 10 steps to avoid too slow simulation
-            step_indices = np.linspace(0, len(route_coords) - 1, steps).astype(int)
-            
-            for i, idx in enumerate(step_indices):
+            for i, location_name in enumerate(self.current_route):
+                # Get coordinates for current location
+                coords = next((loc[1] for loc in self.locations if loc[0] == location_name), None)
+                
                 # Update status message
-                progress = int((i + 1) / steps * 100)
-                status_msg = f"🚑 Ambulance en route: {progress}% complete"
+                progress = int((i + 1) / len(self.current_route) * 100)
+                status_msg = f"🚑 Ambulance en route: {progress}% complete - {location_name}"
                 
                 # Update UI from the main thread - use partial to avoid scope issues
                 self.root.after(0, partial(self.ambulance_status.set, status_msg))
@@ -382,9 +496,9 @@ class AmbulanceRouteFinder:
                 # Add the ambulance marker at the current position
                 ambulance_group.add_child(
                     folium.Marker(
-                        location=route_coords[idx],
+                        location=coords,
                         tooltip="Ambulance",
-                        icon=ambulance_icon
+                        icon=folium.Icon(icon="ambulance", prefix="fa", color="green")
                     )
                 )
                 
@@ -392,11 +506,11 @@ class AmbulanceRouteFinder:
                 m.save(self.map_file)
                 
                 # Make sure to not sleep after the last step
-                if i < len(step_indices) - 1:
+                if i < len(self.current_route) - 1:
                     time.sleep(1)
                     
                 # Clear the ambulance marker for the next step
-                if i < len(step_indices) - 1:  # Don't clear on the last step
+                if i < len(self.current_route) - 1:  # Don't clear on the last step
                     for child in list(ambulance_group._children.values()):
                         ambulance_group._children.pop(child._name)
             
